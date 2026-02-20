@@ -93,7 +93,7 @@ An NLSpec is complete when an agent reading it has everything needed to act corr
 
 This is not the same as specifying everything. A spec that dictates variable names, indentation, internal function decomposition, and memory allocation strategy is not more complete — it's more brittle and less useful. It has wasted precision on decisions that don't affect correctness or interoperability.
 
-Completeness operates at three levels:
+Completeness operates at three levels. These are not strictly disjoint — boundary completeness is a special case of behavioral completeness at the edges of the input space. The distinction is worth preserving because each level corresponds to a different failure mode in practice, and each tends to be overlooked for different reasons:
 
 **Behavioral completeness.** Every observable behavior is determined. For any valid input, the spec determines the correct output (or the correct set of acceptable outputs, when nondeterminism is intentional). For any error condition, the spec determines the error type, whether it's retryable, and what the caller sees.
 
@@ -102,6 +102,20 @@ Completeness operates at three levels:
 **Boundary completeness.** Every limit, default, timeout, maximum, and edge case is specified. What happens when the context window overflows? What happens when a tool call references an unknown tool? What happens when all retry attempts are exhausted? A complete spec has answers.
 
 The judgment call is always: **does this decision affect correctness or interoperability?** If yes, specify it. If no, leave it to the implementer. When in doubt, specify it. Over-specification is less harmful than under-specification, because over-specification produces implementations that are merely constrained, while under-specification produces implementations that are incompatible.
+
+### The Precision-Completeness Distinction
+
+The interchangeability test — would two independent implementations be interchangeable to a caller? — measures **precision**. It asks whether the spec eliminates ambiguity at each point it addresses. But a spec can be perfectly precise at every point it addresses and still be incomplete. Precision means the spec says things clearly. Completeness means the spec says enough things.
+
+A spec that precisely defines request routing, response normalization, and error hierarchy — but never mentions retry behavior — is precise and incomplete. Two implementations would agree on everything the spec covers and diverge on everything it doesn't. The spec eliminated ambiguity within its scope but left scope gaps.
+
+**The recreatability test.** If the implementation were destroyed and only the specification remained, could a competent implementer faithfully recreate the system? This is a completeness proof. It doesn't ask whether the spec is clear (precision). It asks whether the spec is *sufficient* — whether it contains, in itself, everything needed to generate a faithful implementation.
+
+The recreatability test does not require the spec to mention everything. It requires that anything the spec *doesn't* mention falls cleanly into the category of intentional ambiguity — genuine implementation choices where any reasonable decision is acceptable. If a competent implementer, working from the spec alone, would reach a point where they cannot proceed without information the spec doesn't contain, and the missing information isn't a free choice — that's a completeness defect.
+
+This is what makes the NLSpec's claim to be a "prescriptive, generative document that fully determines the construction of a software system" falsifiable. The document asserts that the spec fully determines construction. The recreatability test is how you check that assertion. Without it, "fully determines" is a claim. With it, it's a testable property.
+
+The two tests are complementary. Precision without completeness produces a spec that is clear about what it covers but silent on critical behaviors. Completeness without precision produces a spec that covers everything but leaves room for incompatible interpretations. A well-formed spec passes both: it addresses everything that isn't a free choice (complete), and it addresses each thing without ambiguity (precise).
 
 
 ## Intentional vs. Accidental Ambiguity
@@ -115,6 +129,7 @@ Intentional ambiguity is **freedom granted to the implementer in areas where the
 - **The spec could have specified this but chose not to.** The absence of a requirement is a deliberate design decision. "The library does not invent its own model namespace" — this is the spec explicitly choosing not to specify a model naming convention, and saying why.
 - **Different implementations making different choices here remain interoperable.** If one implementation uses a hash map for provider routing and another uses a match statement, no caller can tell the difference. The ambiguity is below the abstraction boundary.
 - **The spec often signals it explicitly.** Phrases like "implementations may," "the mechanism is not specified," "any combination of them," or "this is an implementation detail" are markers of intentional ambiguity.
+- **Boundary clarifications sharpen the edges of the spec's scope.** A spec may explicitly exclude adjacent functionality to prevent misreading — "this spec does not cover prompt construction or conversation memory" — not because those are unimportant, but because their absence from this spec is a deliberate boundary, not an accidental gap. Such exclusions are a form of intentional ambiguity: the spec is intentionally silent on those areas and is naming that silence so it isn't mistaken for an omission.
 
 Examples: choice of programming language, internal data structure selection, HTTP client library, concurrency primitives, file system layout for source code, error message wording (as long as the error type is correct).
 
@@ -161,6 +176,27 @@ Complex systems require multiple NLSpecs that reference each other. The coding a
 **Composition is through interfaces, not inheritance.** The pipeline runner doesn't extend the coding agent — it defines a `CodergenBackend` interface and says "implement this however you want; the pipeline doesn't care." This is the same principle as intentional ambiguity applied at the system level: the spec determines the contract, not the mechanism.
 
 
+## Specs in Iterative Development
+
+The `Intent → NLSpec → Implementation` chain is not a single pass. In practice — particularly in conversational and agent-assisted development — intent is revealed progressively. A user may not know what they want until they see what they don't want. Requirements emerge, shift, and sharpen as work proceeds.
+
+This does not weaken the spec-first principle. It changes the cadence.
+
+In iterative development, implementation can serve as an epistemological tool — you build something small to discover whether a concept is sound, whether an interface feels right, whether an edge case matters. This is not implementation-of-spec. It is exploration. It lives in the intent phase of the `Intent → NLSpec → Implementation` chain, even though it looks like code. Its purpose is to surface insight, not to satisfy requirements.
+
+When exploration reveals something real — a requirement, a constraint, a behavioral expectation — that insight enters the spec. But it enters **as if the exploration never happened.** The spec is a vacuum artifact. It is written in a world where only intent and domain knowledge exist, not prototypes. The spec does not say "based on our prototype, we discovered X." It says "X." It absorbs the insight and presents it as a freestanding requirement, authoritative on its own terms.
+
+The discipline is: **at no point should the implementation encode a behavioral requirement that the spec does not reflect.** When exploration produces insight, the spec absorbs it before or simultaneously with the implementation encoding it. The spec leads or keeps pace. It never trails. And when the spec absorbs a new requirement, it must do so in a way that preserves self-consistency — the spec at every point in time is a coherent, complete document, not a patchwork of incremental additions.
+
+This connects to the recreatability test. If the spec has successfully absorbed every insight from iterative exploration, then the exploration artifacts (prototypes, experiments, intermediate code) can be discarded. The spec alone is sufficient to regenerate the system. If it can't — if there's knowledge in the prototype that never made it into the spec — the spec has a completeness defect, regardless of how that knowledge was originally discovered.
+
+A spec in an iterative context is a living document, but "living" does not mean "loose." It means the spec accretes deliberately as requirements are discovered, while remaining internally coherent at every revision. Early versions may specify only core behaviors. As edge cases surface, the spec grows to cover them. This is healthy — provided each addition is deliberate and the spec remains self-consistent.
+
+Self-consistency is non-negotiable. A spec that has been updated piecemeal can develop internal contradictions. At any point in time, the spec must be internally coherent. If an update to one section contradicts another, the contradiction must be resolved in the spec before implementation proceeds.
+
+The spec captures the current state of decisions, not the history of how decisions were made. When a requirement changes — "actually, retry three times, not five" — the spec is updated to say three. Rationale for changes, if worth preserving, belongs in commit messages, ADRs, or appendix notes — not in the spec body. The spec is always a present-tense document.
+
+
 ---
 
 ## Appendix A: When Implementing from an NLSpec
@@ -174,6 +210,16 @@ When you are an agent (or human) building code from a spec, these are the judgme
 **The Definition of Done is your completion criterion.** When every item in the checklist passes, you're done. When items remain unchecked, you're not. Resist the urge to add features the spec doesn't require, even good ones. Your job is faithful implementation, not improvement.
 
 **When the spec is ambiguous and you can't tell if it's intentional:** apply the interchangeability test. If your choice doesn't affect callers, make the choice and move on. If it might affect callers, flag it. The phrase you want is: "The spec doesn't specify X. I chose Y because Z, but this is a point where the spec may need tightening."
+
+**Understand the failure modes of a spec.** Not all spec problems are the same, and each kind requires different handling:
+
+- **Ambiguity** — the spec admits multiple incompatible interpretations at a specific point. The implementer must judge which interpretation is intended, or flag it. This is the most common failure mode and is addressed by the interchangeability test above.
+
+- **Malformation (self-contradiction)** — the spec asserts two incompatible requirements. Section A says retry three times; Section B says retry five times. This is a document-level defect. Self-contradiction in a specification is never intentional — it is always an error in the document itself. No amount of implementer judgment resolves a contradiction, because any implementation satisfies one requirement by violating the other. Only the spec author can decide which side of the contradiction reflects actual intent. When you identify a self-contradiction, flag it and request repair. Do not pick a side silently.
+
+- **Incorrectness** — the spec is internally consistent but prescribes wrong behavior. The spec says "timeout after 60 seconds" and that's unambiguous, but the correct value for the domain is 10 seconds. This failure mode may not be detectable from within the spec itself — it requires domain knowledge external to the document. The onus of correctness is on the spec author, not the implementer. An implementer faithfully implementing an incorrect spec has done their job correctly; the spec was wrong, not the implementation.
+
+The response to each failure mode is different. Ambiguity calls for judgment. Contradiction calls for repair. Incorrectness calls for domain authority. An operating environment (project conventions, agent instructions, team process) should provide specific protocols for what to do when each failure mode is encountered — particularly when the spec author is unavailable and the defect is blocking. That operational guidance is outside the scope of this grounding document, but its necessity should be anticipated.
 
 **Map the spec's structure to your implementation's structure.** The spec's sections often correspond to modules, packages, or files. The spec's data models correspond to types. The spec's algorithms correspond to functions. This correspondence should be legible — someone reading the spec should be able to find the corresponding code without a treasure map.
 
