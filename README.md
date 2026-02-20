@@ -10,9 +10,9 @@ This project is an experimental definition of **NLSpecs** \[natural language spe
 
 ### Prior Art
 
-1. [CodeMaxims.md](Prior%20Art/TG-Techie%20-%20CodeMaxims.md)  - Principles evolved during organic exploration spec-first development in a deployed project. Originally conflated the *idea* of specs with the *practice* of using them in one project. The philosophical content fed into this document; operational content (tag conventions, workflows, agent directives) remains project-specific.
+1.  **StrongDM's [attractor](https://github.com/strongdm/attractor)** - Production-quality NLSpecs published open source. StrongDM coined "NLSpec." Their repository contains complete, battle-tested examples and a developed factory methodology.
 
-2. **StrongDM's [attractor](https://github.com/strongdm/attractor)** - Production-quality NLSpecs published open source. StrongDM coined "NLSpec." Their repository contains complete, battle-tested examples and a developed factory methodology.
+2. [CodeMaxims.md](Prior%20Art/TG-Techie%20-%20CodeMaxims.md) - Principles evolved during organic exploration spec-first development in a deployed project. Originally conflated the *idea* of specs with the *practice* of using them in one project. The philosophical content fed into this document; operational content (tag conventions, workflows, agent directives) remains project-specific.
 
 3. **The USB Type-C PD Specification** — (To be discussed.) A pre-existing NLSpec from hardware/protocol engineering.
 
