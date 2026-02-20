@@ -1,8 +1,6 @@
 # NLSpec Grounding Document
 
-## Version
-
-0.2.1
+> Link to the experimental nlspec-spec itself: [nlspec-spec.md](nlspec-spec.md)
 
 ## What This Is
 

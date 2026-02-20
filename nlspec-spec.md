@@ -2,6 +2,10 @@
 
 A grounding document for agents that read, write, implement, and evaluate natural language specifications.
 
+## Version
+
+0.2.1
+
 ---
 
 ## The Nature of the Artifact
