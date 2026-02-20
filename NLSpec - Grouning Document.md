@@ -1,0 +1,220 @@
+# What an NLSpec Is
+
+A grounding document for agents that read, write, implement, and evaluate natural language specifications.
+
+---
+
+## The Nature of the Artifact
+
+An NLSpec is a **prescriptive, generative document written in natural language that fully determines the construction of a software system**. It sits between human intent and working code. It is the authoritative source of truth from which implementation is derived — not a description of something that already exists, not a proposal for discussion, not a guide for users. It is the thing the code must satisfy.
+
+The relationship is directional and non-negotiable:
+
+**Intent → NLSpec → Implementation**
+
+Intent is what someone wants. It's rough, directional, incomplete. "I need a unified LLM client." "Build me a pipeline runner that uses DOT graphs." Intent contains the *why* and broad *what*, but leaves *how* and *precisely what* unresolved.
+
+Implementation is code. It's maximally specific, executable, testable. It contains every decision, including ones the spec author never thought about (buffer sizes, import ordering, variable names).
+
+The NLSpec occupies the space between. Its job is to resolve every decision that matters for correctness and interoperability while leaving every decision that doesn't matter to the implementer. This is a hard, deliberate line to draw, and drawing it well is what separates a good spec from a bad one.
+
+An NLSpec is not a fuzzy artifact. The word "natural language" might suggest informality. It does not. The language is natural; the precision is engineering-grade. When a spec says "the adapter must inject `cache_control` breakpoints automatically for agentic workloads," that sentence has the same binding force as a type signature. It is a requirement. The implementation either does it or violates the spec.
+
+
+## Why NLSpecs Work When They Work
+
+An NLSpec enables faithful implementation — by a human or an agent — when it has five properties. These are not stylistic preferences. They are structural requirements. Remove any one and the spec fails at its job.
+
+### 1. Behavioral Completeness
+
+Every externally observable behavior of the system is specified. Not every internal implementation detail — every *behavior*. The distinction matters.
+
+A spec that says "the Client routes requests to the correct provider adapter based on the `provider` field" is behaviorally complete for routing. It doesn't say whether routing uses a hash map, a switch statement, or a linear scan. It doesn't need to. The behavior — correct dispatch — is fully determined. The mechanism is not, and that's fine, because the mechanism doesn't affect callers.
+
+A spec that says "handle errors appropriately" is behaviorally incomplete. It forces the implementer to make judgment calls about what "appropriate" means, and different implementers will make different calls, producing implementations that are mutually incompatible. That's a spec failure.
+
+Behavioral completeness means: **if two competent implementers independently build from this spec without communicating, their implementations are interchangeable from the perspective of any caller.** Internal structure may differ. Observable behavior does not.
+
+### 2. Unambiguous Interfaces
+
+Every boundary where components meet is specified precisely. Interfaces include: function signatures, data structures, wire formats, error types, event schemas, configuration surfaces, and state contracts.
+
+This is where NLSpecs do their heaviest lifting. A spec defines a `Response` record with fields `id`, `model`, `provider`, `message`, `finish_reason`, `usage`, `raw`, `warnings`, `rate_limit`. Each field has a type. Each type is defined elsewhere in the spec. The relationships between them are explicit. An implementer reading this can write the data structure in any language without guessing.
+
+The same precision applies to behavioral interfaces. A spec that defines an edge selection algorithm — "Step 1: condition-matching edges. Step 2: preferred label match. Step 3: suggested next IDs. Step 4: highest weight. Step 5: lexical tiebreak" — has eliminated all ambiguity about what the engine does at a routing decision point. The algorithm is deterministic. Two implementations will select the same edge given the same inputs.
+
+### 3. Explicit Defaults and Boundaries
+
+Every configurable value has a default. Every range has bounds. Every optional parameter has documented behavior when omitted.
+
+This sounds obvious. In practice, it's where most specs fall apart. A spec that introduces a `timeout` parameter without specifying the default, the maximum, and what happens when the timeout fires has created three implementation-divergence points. A good NLSpec closes all three: "default 10 seconds, maximum 10 minutes, on timeout: SIGTERM to process group, wait 2 seconds, SIGKILL, return partial output with timeout message."
+
+Defaults are not details. Defaults are the behavior most users experience. Leaving them unspecified means leaving the most common case to the implementer's imagination.
+
+### 4. Mapping Tables for Translation
+
+When a system interacts with multiple external systems that model the same concept differently, the spec provides explicit translation tables.
+
+A unified LLM client talks to OpenAI, Anthropic, and Gemini. Each has a different name for "the model stopped generating." OpenAI says `stop`. Anthropic says `end_turn`. Gemini says `STOP`. The spec doesn't say "map these appropriately." It provides a table: OpenAI `stop` → unified `stop`. Anthropic `end_turn` → unified `stop`. Gemini `STOP` → unified `stop`. Row by row, exhaustively.
+
+This matters because translation is where subtle bugs hide. An implementer who doesn't know that Gemini has no dedicated "tool_calls" finish reason will fail to detect tool calls in Gemini responses. The spec prevents this by specifying: "Gemini does not have a dedicated 'tool_calls' finish reason. The adapter infers it from the presence of `functionCall` parts in the response." That sentence eliminates an entire class of bugs.
+
+### 5. Testable Acceptance Criteria
+
+The spec includes a "Definition of Done" — a concrete, checkable list of properties the implementation must satisfy. This is not a test plan (which defines *how* to test). It's a contract: *what must be true* when the implementation is correct.
+
+Good acceptance criteria are binary. "Simple text generation works across all providers" is checkable. "The system handles errors well" is not. The cross-provider parity matrix — a grid of test cases × providers where every cell must pass — is the gold standard. It makes completeness visible and gaps impossible to ignore.
+
+Acceptance criteria serve a second purpose: they bound the scope. If something isn't in the Definition of Done, it's not required. An implementer who builds everything in the checklist and nothing more has done the job. This protects against scope creep and gold-plating.
+
+
+## What an NLSpec Is Not
+
+Several artifacts look like NLSpecs. They share surface features — prose, technical content, descriptions of systems. They are not the same thing. The distinctions are functional, not stylistic.
+
+**A README** describes something that exists. An NLSpec describes something that should be built. The arrow of authority is reversed: a README is derived from code; code is derived from an NLSpec. When code and README conflict, you update the README. When code and NLSpec conflict, you update the code.
+
+**A design document** proposes an approach for evaluation. It says "here's how we could build this; let's discuss." An NLSpec says "here's how this will be built; go build it." A design doc invites disagreement before commitment. An NLSpec is the result of that disagreement being resolved. Shipping a design doc to an implementer produces negotiation. Shipping an NLSpec produces code.
+
+**An architecture decision record (ADR)** captures *why* a decision was made, after the decision is made. An NLSpec captures *what* was decided and *how it behaves*. ADRs are retrospective. NLSpecs are prospective. A good NLSpec may include rationale (the Attractor specs have "Design Decision Rationale" appendices), but the rationale serves understanding, not authority. The spec is authoritative whether or not you agree with the rationale.
+
+**API reference documentation** describes the surface of an existing system for consumers. An NLSpec describes the surface *and internals* of a system that doesn't exist yet, for builders. API docs say "here's what you can call and what it returns." NLSpecs say that, plus "here's the algorithm inside, here's the error hierarchy, here's the retry policy, here's the provider translation table, here's what happens at every edge case."
+
+**A test plan** defines how to verify a system. An NLSpec defines what the system must do. A test plan is derived from a spec; a spec is not derived from a test plan. The Definition of Done in a spec looks like a test plan but serves a different purpose: it's an acceptance contract, not a testing strategy. It says *what* to verify, not *how* to verify it.
+
+**A tutorial or guide** teaches a human how to use or build something, optimizing for learning. It may omit details, simplify, reorder for pedagogy. An NLSpec optimizes for completeness and precision, not for learning. It may be hard to read linearly. That's acceptable. A spec that sacrifices precision for readability has failed at its primary job.
+
+The critical distinction across all of these: **an NLSpec is the source of truth that generates an implementation. Every other document type is either upstream of it (intent, design docs) or downstream of it (API docs, READMEs, tutorials, test plans). Confusing the direction produces the wrong artifact.**
+
+
+## What Completeness Means
+
+An NLSpec is complete when an agent reading it has everything needed to act correctly, and nothing is left to arbitrary choice that shouldn't be.
+
+This is not the same as specifying everything. A spec that dictates variable names, indentation, internal function decomposition, and memory allocation strategy is not more complete — it's more brittle and less useful. It has wasted precision on decisions that don't affect correctness or interoperability.
+
+Completeness operates at three levels:
+
+**Behavioral completeness.** Every observable behavior is determined. For any valid input, the spec determines the correct output (or the correct set of acceptable outputs, when nondeterminism is intentional). For any error condition, the spec determines the error type, whether it's retryable, and what the caller sees.
+
+**Interface completeness.** Every point where two components meet is defined with enough precision that the components can be built independently and still connect correctly. Data structures have fields with types. Functions have signatures with parameter and return types. Protocols have message formats and sequencing rules.
+
+**Boundary completeness.** Every limit, default, timeout, maximum, and edge case is specified. What happens when the context window overflows? What happens when a tool call references an unknown tool? What happens when all retry attempts are exhausted? A complete spec has answers.
+
+The judgment call is always: **does this decision affect correctness or interoperability?** If yes, specify it. If no, leave it to the implementer. When in doubt, specify it. Over-specification is less harmful than under-specification, because over-specification produces implementations that are merely constrained, while under-specification produces implementations that are incompatible.
+
+
+## Intentional vs. Accidental Ambiguity
+
+Every NLSpec contains ambiguity. Some is intentional and valuable. Some is accidental and destructive. Distinguishing the two is a core skill for anyone working with specs.
+
+### Intentional Ambiguity
+
+Intentional ambiguity is **freedom granted to the implementer in areas where the spec author has determined that any reasonable choice is acceptable.** It is characterized by:
+
+- **The spec could have specified this but chose not to.** The absence of a requirement is a deliberate design decision. "The library does not invent its own model namespace" — this is the spec explicitly choosing not to specify a model naming convention, and saying why.
+- **Different implementations making different choices here remain interoperable.** If one implementation uses a hash map for provider routing and another uses a match statement, no caller can tell the difference. The ambiguity is below the abstraction boundary.
+- **The spec often signals it explicitly.** Phrases like "implementations may," "the mechanism is not specified," "any combination of them," or "this is an implementation detail" are markers of intentional ambiguity.
+
+Examples: choice of programming language, internal data structure selection, HTTP client library, concurrency primitives, file system layout for source code, error message wording (as long as the error type is correct).
+
+### Accidental Ambiguity
+
+Accidental ambiguity is **a gap in the spec where the author intended to specify behavior but failed to, or where the specified behavior admits multiple incompatible interpretations.** It is characterized by:
+
+- **Different implementations making different choices here produce incompatible or incorrect behavior.** If one implementation retries on timeout and another doesn't, callers experience different reliability characteristics from the same spec.
+- **The spec appears to assume something it never states.** "Process the messages in order" — does "in order" mean insertion order, chronological order, or priority order? The author probably meant one of these but didn't say which.
+- **An implementer must guess to proceed.** Intentional ambiguity lets the implementer choose freely. Accidental ambiguity forces the implementer to guess what the author meant. The difference is felt in the implementer's experience: freedom feels like freedom; guessing feels like anxiety.
+
+### How to Tell the Difference
+
+The test is: **would two implementations that resolve this ambiguity differently be interchangeable to a caller?**
+
+If yes, the ambiguity is intentional or at least harmless. If no, the ambiguity is accidental and the spec needs to be tightened.
+
+There is a gray zone. A spec might leave ambiguous whether an error message says "File not found: /path/to/file" or "No such file: /path/to/file." Strictly, these are different outputs. Practically, no caller depends on error message text. The ambiguity is harmless. Judgment is required; the test is a guide, not a theorem.
+
+
+## The Structure of NLSpecs in Practice
+
+NLSpecs share structural patterns not because someone prescribed a template, but because these patterns solve recurring problems in specification writing.
+
+**Progressive disclosure of detail.** Specs open with an overview (what is this system, what problem does it solve, what are the design principles) and progressively deepen into architecture, data models, algorithms, and edge cases. This isn't pedagogical ordering — it's dependency ordering. You can't understand the edge selection algorithm until you understand what nodes and edges are. You can't understand what nodes and edges are until you understand what a pipeline is.
+
+**Pseudocode for algorithms, prose for contracts.** When behavior is algorithmic (a loop, a selection process, a retry policy), pseudocode specifies it precisely. When behavior is contractual (an interface, a data structure, an error hierarchy), prose with structured definitions specifies it. The choice of representation matches the nature of the thing being specified.
+
+**Tables for mappings.** When the spec must define how concept X in system A corresponds to concept Y in system B, a table is the right representation. Tables are exhaustive, scannable, and make gaps visible. Prose descriptions of mappings hide gaps.
+
+**Appendices for rationale and reference.** The main body of the spec says *what*. Appendices explain *why* (design decision rationale) and provide reference material (complete attribute tables, format specifications, examples). The main body is authoritative. Appendices are supportive.
+
+**A Definition of Done.** The spec ends with a concrete, checkable list of acceptance criteria. This list is the operational definition of "this implementation is correct." It transforms the spec from a document you interpret into a contract you satisfy.
+
+
+## How NLSpecs Relate to Each Other
+
+Complex systems require multiple NLSpecs that reference each other. The coding agent loop spec depends on the unified LLM client spec. The pipeline runner spec can use either as a backend. These relationships have rules:
+
+**Dependency is explicit.** A spec that depends on another says so directly: "This spec layers on top of the Unified LLM Client Specification, which handles all LLM communication." The dependency is named, the interface boundary is clear, and the importing spec states exactly which types and functions it uses from the dependency.
+
+**Specs don't reach into each other's internals.** The coding agent loop spec uses `Client.complete()` and `Client.stream()` from the LLM SDK. It does not reach into the SDK's provider adapters, SSE parsing, or retry logic. The boundary between specs is an API, not a gentleman's agreement.
+
+**Composition is through interfaces, not inheritance.** The pipeline runner doesn't extend the coding agent — it defines a `CodergenBackend` interface and says "implement this however you want; the pipeline doesn't care." This is the same principle as intentional ambiguity applied at the system level: the spec determines the contract, not the mechanism.
+
+
+---
+
+## Appendix A: When Implementing from an NLSpec
+
+When you are an agent (or human) building code from a spec, these are the judgment calls that matter:
+
+**The spec is not a suggestion.** Every requirement in the spec is a requirement. If the spec says "the adapter must generate synthetic unique IDs," you generate synthetic unique IDs. You don't decide it's unnecessary. You don't skip it because your language makes it awkward. If you believe the spec is wrong, you raise the issue — you don't silently deviate.
+
+**Intentional ambiguity is your design space.** Where the spec doesn't specify, you choose. Choose well: prefer simplicity, prefer the idiomatic approach for your language, prefer the choice that makes future spec compliance easier. But do choose — don't treat every unspecified detail as a question to ask.
+
+**The Definition of Done is your completion criterion.** When every item in the checklist passes, you're done. When items remain unchecked, you're not. Resist the urge to add features the spec doesn't require, even good ones. Your job is faithful implementation, not improvement.
+
+**When the spec is ambiguous and you can't tell if it's intentional:** apply the interchangeability test. If your choice doesn't affect callers, make the choice and move on. If it might affect callers, flag it. The phrase you want is: "The spec doesn't specify X. I chose Y because Z, but this is a point where the spec may need tightening."
+
+**Map the spec's structure to your implementation's structure.** The spec's sections often correspond to modules, packages, or files. The spec's data models correspond to types. The spec's algorithms correspond to functions. This correspondence should be legible — someone reading the spec should be able to find the corresponding code without a treasure map.
+
+**Provider-specific translation tables are not optional.** If the spec provides a mapping table, implement every row. Don't implement "the common ones" and plan to add others later. The table exists because every row matters; the uncommon cases are often where the subtlest bugs hide.
+
+
+## Appendix B: When Authoring an NLSpec
+
+When you are writing a spec, these are the judgment calls that matter:
+
+**Specify behavior, not mechanism.** Say what the system does, not how it does it internally — unless the internal mechanism is load-bearing. A retry policy's backoff formula is load-bearing (it affects observable timing). A retry policy's implementation using a loop vs. recursion is not.
+
+**When you don't care, say so.** Intentional ambiguity should be visible. "The library does not prescribe internal data structures for provider routing" is better than silence, because silence could be an accidental gap.
+
+**When in doubt, over-specify.** An implementer can always choose to ignore a spec detail that turns out to be unnecessary. An implementer cannot invent a spec detail that turns out to be missing. Over-specification constrains; under-specification breaks.
+
+**Defaults are requirements.** Every configurable value needs a default. Every optional parameter needs defined behavior when omitted. "Default: 10 seconds" is a requirement as binding as any other. If you don't specify the default, you've left the most common user experience to chance.
+
+**Tables beat prose for mappings.** When you're describing how concept X maps to concept Y across multiple systems, use a table. Tables are exhaustive by visual inspection — you can see when a row is missing. Prose descriptions of the same mapping hide gaps behind sentences.
+
+**Include a Definition of Done.** Without it, the spec has no operational boundary. An implementer doesn't know when they're finished. A reviewer doesn't know what to check. A Definition of Done converts a document into a contract.
+
+**Design rationale belongs in an appendix.** The main body says *what*. Rationale says *why*. Mixing them makes the spec harder to use as a reference. An implementer re-reading the spec for the third time doesn't need to re-encounter the justification for every design choice.
+
+**Write for the implementer who disagrees with you.** The spec should be followable even by someone who thinks your design is wrong. This means the spec must be precise enough that "I would have done it differently" doesn't lead to "so I did it differently." Precision is the antidote to well-intentioned deviation.
+
+
+## Appendix C: When Evaluating an NLSpec
+
+When you are assessing whether a spec is good — whether as a reviewer, an editor, or an agent deciding whether a spec is ready to implement from — these are the judgment calls that matter:
+
+**Apply the two-implementer test.** For every requirement, ask: if two competent implementers built this independently, would their implementations be interchangeable to a caller? If yes, the spec is sufficiently precise at that point. If no, find the ambiguity and flag it.
+
+**Check the boundaries.** The highest-risk areas in any spec are interfaces between components, default values, error handling, and edge cases. These are where accidental ambiguity hides. Read these sections with maximum skepticism.
+
+**Look for missing rows in mapping tables.** If a spec maps concepts across systems and a known case isn't in the table, that's a gap. If Gemini has no "tool_calls" finish reason and the finish reason mapping table doesn't account for that, the spec is incomplete.
+
+**Verify the Definition of Done against the spec body.** Every requirement in the spec body should have a corresponding item in the Definition of Done. Requirements that aren't testable aren't enforceable. Checklist items that don't trace back to spec requirements are scope creep.
+
+**Distinguish "hard to implement" from "ambiguous."** A requirement can be perfectly clear and extremely difficult. "Execute all tool calls concurrently, wait for all results, send all results in a single continuation request, preserve ordering, handle partial failures gracefully" — this is hard to implement correctly. It is not ambiguous. Don't flag difficulty as a spec problem.
+
+**Assess whether intentional ambiguity is actually intentional.** When the spec is silent on something, ask: is this silence deliberate (the spec author doesn't care about this choice) or accidental (the spec author forgot)? Clues: if the surrounding area is highly specified and one detail is missing, it's probably accidental. If the spec explicitly says "this is left to the implementer" or "the mechanism is not specified," it's deliberate.
+
+**Check temporal assumptions.** Specs that reference specific model names, API versions, or provider capabilities will go stale. Good specs handle this by providing both concrete current values (for immediate use) and the principle for updating them (so future maintainers know what to change). A spec that says "use GPT-5.2" without context is fragile. A spec that says "prefer the latest available model; at time of writing, GPT-5.2" is maintainable.
