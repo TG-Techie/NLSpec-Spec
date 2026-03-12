@@ -4,7 +4,7 @@ A grounding document for agents that read, write, implement, and evaluate natura
 
 ## Version
 
-0.2.1
+0.2.2
 
 ---
 
@@ -105,7 +105,7 @@ Completeness operates at three levels. These are not strictly disjoint — bound
 
 **Boundary completeness.** Every limit, default, timeout, maximum, and edge case is specified. What happens when the context window overflows? What happens when a tool call references an unknown tool? What happens when all retry attempts are exhausted? A complete spec has answers.
 
-The judgment call is always: **does this decision affect correctness or interoperability?** If yes, specify it. If no, leave it to the implementer. When in doubt, specify it. Over-specification is less harmful than under-specification, because over-specification produces implementations that are merely constrained, while under-specification produces implementations that are incompatible.
+The judgment call is always: **does this decision affect correctness or interoperability?** If yes, specify it. If no, leave it to the implementer. When in doubt, specify it. Over-specification through additional requirements is less harmful than under-specification, because over-specification produces implementations that are merely constrained, while under-specification produces implementations that are incompatible.
 
 ### The Precision-Completeness Distinction
 
@@ -120,6 +120,42 @@ The recreatability test does not require the spec to mention everything. It requ
 This is what makes the NLSpec's claim to be a "prescriptive, generative document that fully determines the construction of a software system" falsifiable. The document asserts that the spec fully determines construction. The recreatability test is how you check that assertion. Without it, "fully determines" is a claim. With it, it's a testable property.
 
 The two tests are complementary. Precision without completeness produces a spec that is clear about what it covers but silent on critical behaviors. Completeness without precision produces a spec that covers everything but leaves room for incompatible interpretations. A well-formed spec passes both: it addresses everything that isn't a free choice (complete), and it addresses each thing without ambiguity (precise).
+
+
+## Conceptual Fidelity
+
+A spec's data models should reflect the domain's inherent information structure — the distinctions, relationships, and variants that exist in the problem itself, independent of how anyone chooses to represent them. When a spec achieves this, it has conceptual fidelity: the reader absorbs the domain by reading the spec, rather than having to reconstruct the domain from an encoding of it.
+
+Conceptual fidelity matters because a spec that models its encoding rather than its domain has drifted from its own subject matter. The spec is *about* the domain. When its models describe how to transcribe the domain's information rather than what that information *is*, the reader must first decode the representation to reach the concepts — which is exactly the kind of burden a spec should not impose.
+
+Consider a response that is either a success with a body or an error with a code. The domain has two mutually exclusive cases, each carrying different information. A spec with conceptual fidelity models this as a sum type: two variants, each with only the fields that case requires. The reader sees the domain directly.
+
+A spec that instead models this as a single record with optional fields for both the success body and the error code — plus a prose invariant explaining that exactly one must be present — has modeled the encoding, not the domain. The flat record with its invariant is a way to *transcribe* the two-case structure into a representation, but the representation is not the concept. The reader must mentally reconstruct the domain's actual shape from the encoding, and the prose invariant exists only to patch the gap between the model and the domain it claims to describe.
+
+This is not a rule about preferring sum types. It is an observation about what happens when a spec models inherent information directly: the modeling constructs that fit the domain — sum types for mutually exclusive cases, product types for co-occurring fields, sequences for ordered collections — follow from the domain's own structure. The spec author's job is to identify what the information *is* and model that, not to choose a representation and then constrain it with prose.
+
+Unenforced invariants — constraints stated in prose rather than captured by the spec's model structure — are occasionally justified. They are a rarer analogue of intentional ambiguity: sometimes the constraint spans a boundary that no single type can capture or experience from prior implementations of the spec inform the decision to express a model as such. When an unenforced invariant is genuinely necessary, it should be marked explicitly and accompanied by the intent and rationale so the understanding is conveyed to readers of the spec.
+
+A first test for conceptual fidelity: **does the spec's model have the same shape as the domain's information, or does the reader have to reshape one to see the other?** When the conceptual shapes match, the spec is transparent to the domain. When they don't, the spec has interposed its own encoding between the reader and the inherent subject matter of the underlying problem or concept.
+
+
+## Spec Economy
+
+Spec economy is the discipline of minimizing the context burden on the reader while preserving full precision and completeness. It is not about short specs. It is about specs where every sentence does work that no other sentence does.
+
+Where conceptual fidelity asks whether the spec models the right thing, economy asks whether the spec *says* it without waste or structural self-harm. A complete but uneconomical spec is harder to verify, harder to maintain, and more likely to develop internal contradictions as it evolves.
+
+**Inputs and outputs are the contract.** Both must be explicit. Omitting outputs because they're "derivable" is false economy — it shifts the derivation burden onto the reader. But explicit does not mean verbose: `Output = Input & { pvFuture: USD, totalPV: USD }` is both explicit and economical.
+
+**The economy test.** For each sentence, ask: "would removing this sentence cause two independent implementers to produce different outputs?" If yes, the sentence carries load. If no, it is either redundant with another sentence or specifying implementation mechanism within the intentional ambiguity space — either way, cut it. This is a sentence-level application of the two-implementer test. The spec-level test asks whether the whole document produces interchangeable implementations. The economy test asks whether each individual sentence contributes to that outcome.
+
+Economy interacts with the over-specification principle. This document advises: when in doubt, specify it. Economy adds: specify it *once*. Over-specification through redundancy is not safer — it creates drift risk, and drift produces the self-contradictions that are the most severe class of spec failure.
+
+**Redundancy creates drift.** When the same fact is stated in two places — a formula defines the output and a separate section lists the output fields — there are now two sources of truth. When they drift apart, the spec has a self-contradiction, which this document identifies as always an error, never intentional. The fix is the define-once principle: each concept is introduced exactly once, in the most natural location, and referenced by name everywhere else. This eliminates drift by construction.
+
+**Non-local context dependencies burden the reader.** When understanding one section requires remembering a convention from an earlier section, a default from a third, and an exception from an appendix, the reader is carrying context that the spec's structure should be managing. A well-economized spec either states the relevant convention inline where it's used, or structures itself so that sections are self-contained with explicit references to shared definitions.
+
+**Implementation decomposition is not domain structure.** When a spec mirrors the internal factoring of code — five subsections for five helper functions — it has imported structure from the implementation's intentional ambiguity space into the spec. The spec describes the calculation. How the calculation is decomposed into functions is an implementation choice.
 
 
 ## Intentional vs. Accidental Ambiguity
@@ -238,7 +274,7 @@ When you are writing a spec, these are the judgment calls that matter:
 
 **When you don't care, say so.** Intentional ambiguity should be visible. "The library does not prescribe internal data structures for provider routing" is better than silence, because silence could be an accidental gap.
 
-**When in doubt, over-specify.** An implementer can always choose to ignore a spec detail that turns out to be unnecessary. An implementer cannot invent a spec detail that turns out to be missing. Over-specification constrains; under-specification breaks.
+**When in doubt, over-specify — but specify once.** An implementer can always choose to ignore a spec detail that turns out to be unnecessary. An implementer cannot invent a spec detail that turns out to be missing. Over-specification constrains; under-specification breaks. But stating the same requirement in two places creates drift risk. Define each fact once, in the most natural location, and reference it by name elsewhere.
 
 **Defaults are requirements.** Every configurable value needs a default. Every optional parameter needs defined behavior when omitted. "Default: 10 seconds" is a requirement as binding as any other. If you don't specify the default, you've left the most common user experience to chance.
 
